@@ -7,14 +7,29 @@ using Hangfire.Server;
 using Hangfire.States;
 using Hangfire.Storage;
 using System.Transactions;
-class ResetRangeAttribute : JobFilterAttribute, IClientFilter, IServerFilter, IApplyStateFilter
+class ResetRangeAttribute : JobFilterAttribute, IClientFilter
 {
+
+    private void TransactionScopeError (CreatedContext filterContext, IEnumerable<KeyValuePair<string, string>> values) {
+        // The transaction specified for TransactionScope has a different IsolationLevel than the value requested for the scope
+        filterContext.Connection.SetRangeInHash("foo", values);
+    }
+
+    private void ForeignKeyError (CreatedContext filterContext, IEnumerable<KeyValuePair<string, string>> values) {
+        // insert or update on table "state" violates foreign key constraint "state_jobid_fkey
+        var options2 = new TransactionOptions() { IsolationLevel = IsolationLevel.Unspecified};
+        using(var t2s = new TransactionScope(TransactionScopeOption.Suppress, options2, TransactionScopeAsyncFlowOption.Suppress)) {
+            filterContext.Connection.SetRangeInHash("foo", values);
+        }
+    }
+
+
     public void OnCreated(CreatedContext filterContext)
     {
-        Console.WriteLine("ResetRangeAttribute OnCreated");
         var values =  new Dictionary<string, string>() { {"Timestamp", DateTimeOffset.UtcNow.ToString("o")} };
-        filterContext.Connection.SetRangeInHash("foo", values);
-        // throw new NotImplementedException();
+
+        // this.TransactionScopeError(filterContext, values);
+        this.ForeignKeyError(filterContext,values);
     }
 
     public void OnCreating(CreatingContext filterContext)
@@ -22,25 +37,6 @@ class ResetRangeAttribute : JobFilterAttribute, IClientFilter, IServerFilter, IA
         // throw new NotImplementedException();
     }
 
-    public void OnPerformed(PerformedContext filterContext)
-    {
-        // throw new NotImplementedException();
-    }
-
-    public void OnPerforming(PerformingContext filterContext)
-    {
-        // throw new NotImplementedException();
-    }
-
-    public void OnStateApplied(ApplyStateContext context, IWriteOnlyTransaction transaction)
-    {
-        // throw new NotImplementedException();
-    }
-
-    public void OnStateUnapplied(ApplyStateContext context, IWriteOnlyTransaction transaction)
-    {
-        // throw new NotImplementedException();
-    }
 }
 
 class SomeInternalLogic {
